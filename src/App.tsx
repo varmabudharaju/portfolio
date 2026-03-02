@@ -75,8 +75,11 @@ const MouseGlow = () => {
 
 const ArcadeHoops = () => {
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [topPlayer, setTopPlayer] = useState('GUEST');
+  const [leaderboard, setLeaderboard] = useState<{name: string, score: number}[]>([
+    { name: 'GUEST', score: 0 },
+    { name: '---', score: 0 },
+    { name: '---', score: 0 }
+  ]);
   const [isShooting, setIsShooting] = useState(false);
   const [message, setMessage] = useState('');
   const [showNameInput, setShowNameInput] = useState(false);
@@ -110,7 +113,9 @@ const ArcadeHoops = () => {
       } else {
         setMessage('BRICK! 🧱');
         setTimeout(() => {
-          if (score > highScore && score > 0) {
+          // Check if score qualifies for top 3
+          const lowestTopScore = leaderboard[2].score;
+          if (score > lowestTopScore && score > 0) {
             setShowNameInput(true);
           } else {
             setScore(0);
@@ -124,8 +129,13 @@ const ArcadeHoops = () => {
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = tempName.trim() ? tempName.trim().toUpperCase().slice(0, 8) : 'ANON';
-    setTopPlayer(finalName);
-    setHighScore(score);
+    
+    setLeaderboard(prev => {
+      const newLeaderboard = [...prev, { name: finalName, score }];
+      newLeaderboard.sort((a, b) => b.score - a.score);
+      return newLeaderboard.slice(0, 3);
+    });
+    
     setScore(0);
     setShowNameInput(false);
     setTempName('');
@@ -134,20 +144,27 @@ const ArcadeHoops = () => {
 
   return (
     <div className="w-full max-w-[320px] bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm rounded-2xl p-5 flex flex-col items-center relative overflow-hidden mx-auto">
-      {/* Header / Top Player */}
+      {/* Header / Leaderboard */}
       <div className="w-full flex flex-col gap-3 mb-4">
-        <div className="flex items-center justify-between bg-zinc-950/80 p-2.5 rounded-lg border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
-          <div className="flex items-center gap-2">
+        <div className="bg-zinc-950/80 p-3 rounded-lg border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+          <div className="flex items-center gap-2 mb-2 border-b border-zinc-800 pb-2">
             <Crown size={16} className="text-yellow-500 drop-shadow-[0_0_5px_rgba(234,179,8,0.5)]" />
-            <span className="text-[10px] font-mono text-zinc-400 tracking-widest">HIGH SCORE</span>
+            <span className="text-[10px] font-mono text-zinc-400 tracking-widest">LEADERBOARD</span>
           </div>
-          <div className="flex items-baseline gap-3">
-            <span className="text-sm font-bold text-emerald-400 font-mono tracking-wider">{topPlayer}</span>
-            <span className="text-xl font-bold text-white font-mono leading-none">{highScore}</span>
+          <div className="flex flex-col gap-1.5">
+            {leaderboard.map((entry, idx) => (
+              <div key={idx} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono ${idx === 0 ? 'text-yellow-500' : idx === 1 ? 'text-zinc-300' : 'text-orange-400'}`}>#{idx + 1}</span>
+                  <span className={`text-xs font-bold font-mono tracking-wider ${idx === 0 ? 'text-emerald-400' : 'text-zinc-400'}`}>{entry.name}</span>
+                </div>
+                <span className={`text-sm font-bold font-mono ${idx === 0 ? 'text-white' : 'text-zinc-500'}`}>{entry.score}</span>
+              </div>
+            ))}
           </div>
         </div>
         
-        <div className="flex items-center justify-between px-1">
+        <div className="flex items-center justify-between px-1 mt-1">
           <span className="text-[10px] text-zinc-500 font-mono tracking-widest">CURRENT SCORE</span>
           <span className="text-4xl font-bold text-white font-mono leading-none">{score}</span>
         </div>
@@ -191,7 +208,7 @@ const ArcadeHoops = () => {
               animate={{ opacity: 1 }}
               className="absolute inset-0 bg-zinc-950/90 backdrop-blur-md z-40 flex flex-col items-center justify-center p-4"
             >
-              <span className="text-emerald-400 font-bold mb-1">NEW HIGH SCORE!</span>
+              <span className="text-emerald-400 font-bold mb-1">TOP 3 SCORE!</span>
               <span className="text-2xl font-mono text-white mb-4">{score}</span>
               <form onSubmit={handleNameSubmit} className="w-full flex flex-col gap-2">
                 <input 
@@ -788,6 +805,20 @@ const Experience = () => {
 
 const Work = () => {
   const selectedProjects = [
+    {
+      title: "PG Semantic",
+      description: "A PostgreSQL extension that integrates semantic search capabilities directly into the database using vector embeddings and pgvector.",
+      image: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=800&auto=format&fit=crop",
+      tags: ["PostgreSQL", "C", "Vector Search", "pgvector"],
+      link: "https://github.com/varmabudharaju/pgsemantic"
+    },
+    {
+      title: "Shield Shot",
+      description: "A comprehensive security analysis tool designed to capture, analyze, and report on potential vulnerabilities in web applications.",
+      image: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=800&auto=format&fit=crop",
+      tags: ["Security", "Python", "Analysis Tool"],
+      link: "https://github.com/varmabudharaju/ShieldShot"
+    },
     {
       title: "LumeShell (ShellBuddy)",
       description: "A modern terminal emulator powered by AI. Built with Electron, React 19, TypeScript, xterm.js, and node-pty with full PTY emulation and multi-tab support under 80ms latency.",
