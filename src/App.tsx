@@ -1,6 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform, useSpring, animate } from 'motion/react';
-import { Github, Linkedin, ExternalLink, Terminal, Cpu, Globe, ChevronRight, Menu, X, Database, Cloud, Activity, Code2, BookOpen, FileText, Coffee, Plane, Book, PenTool, Crown } from 'lucide-react';
+import { Github, Linkedin, ExternalLink, Terminal, Cpu, Globe, ChevronRight, Menu, X, Database, Cloud, Activity, Code2, BookOpen, FileText, Coffee, Plane, Book, PenTool, Crown, Download, Package, ShieldCheck, Search, Network, HeartPulse, Send, Loader2, CheckCircle2 } from 'lucide-react';
+import { fetchTopScores, submitScore, supabaseConfigured, sendMessage, contactConfigured } from './api';
+
+// Pad a list of real scores out to three rows for the leaderboard display.
+const padScores = (entries: { name: string; score: number }[]) => {
+  const padded = [...entries];
+  while (padded.length < 3) padded.push({ name: '---', score: 0 });
+  return padded.slice(0, 3);
+};
 
 // --- Fun Interactive Components ---
 
@@ -75,16 +83,21 @@ const MouseGlow = () => {
 
 const ArcadeHoops = () => {
   const [score, setScore] = useState(0);
-  const [leaderboard, setLeaderboard] = useState<{name: string, score: number}[]>([
-    { name: 'GUEST', score: 0 },
-    { name: '---', score: 0 },
-    { name: '---', score: 0 }
-  ]);
+  const [leaderboard, setLeaderboard] = useState<{name: string, score: number}[]>(padScores([]));
   const [isShooting, setIsShooting] = useState(false);
   const [message, setMessage] = useState('');
   const [showNameInput, setShowNameInput] = useState(false);
   const [tempName, setTempName] = useState('');
+  const [saving, setSaving] = useState(false);
   const hoopX = useMotionValue(0);
+
+  // Load the global high scores from Supabase on mount.
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    fetchTopScores(3)
+      .then((scores) => setLeaderboard(padScores(scores)))
+      .catch(() => { /* keep placeholders if the leaderboard can't be reached */ });
+  }, []);
 
   useEffect(() => {
     // Easier: Slower base speed, wider travel but slower acceleration
@@ -126,16 +139,29 @@ const ArcadeHoops = () => {
     }, 300); // Ball flight time
   };
 
-  const handleNameSubmit = (e: React.FormEvent) => {
+  const handleNameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const finalName = tempName.trim() ? tempName.trim().toUpperCase().slice(0, 8) : 'ANON';
-    
-    setLeaderboard(prev => {
-      const newLeaderboard = [...prev, { name: finalName, score }];
-      newLeaderboard.sort((a, b) => b.score - a.score);
-      return newLeaderboard.slice(0, 3);
-    });
-    
+    const entry = { name: finalName, score };
+
+    // Optimistic local update so the board feels instant.
+    setLeaderboard(prev =>
+      padScores([...prev.filter(s => s.score > 0), entry].sort((a, b) => b.score - a.score).slice(0, 3))
+    );
+
+    if (supabaseConfigured) {
+      setSaving(true);
+      try {
+        await submitScore(entry);
+        const fresh = await fetchTopScores(3);
+        setLeaderboard(padScores(fresh));
+      } catch {
+        /* keep the optimistic list if the save can't reach Supabase */
+      } finally {
+        setSaving(false);
+      }
+    }
+
     setScore(0);
     setShowNameInput(false);
     setTempName('');
@@ -220,8 +246,8 @@ const ArcadeHoops = () => {
                   className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-center font-mono text-white uppercase focus:outline-none focus:border-emerald-500"
                   autoFocus
                 />
-                <button type="submit" className="w-full bg-emerald-500 text-zinc-950 font-bold py-2 rounded hover:bg-emerald-400 transition-colors">
-                  SAVE
+                <button type="submit" disabled={saving} className="w-full bg-emerald-500 text-zinc-950 font-bold py-2 rounded hover:bg-emerald-400 transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+                  {saving ? <><Loader2 size={16} className="animate-spin" /> SAVING…</> : 'SAVE'}
                 </button>
               </form>
             </motion.div>
@@ -359,6 +385,7 @@ const Header = () => {
     { name: 'About', href: '#about' },
     { name: 'Experience', href: '#experience' },
     { name: 'Work', href: '#work' },
+    { name: 'Resume', href: '#resume' },
     { name: 'Papers', href: '#papers' },
     { name: 'Contact', href: '#contact' },
   ];
@@ -475,7 +502,7 @@ const Hero = () => {
               transition={{ duration: 0.7, delay: 0.2 }}
               className="text-lg md:text-xl text-zinc-400 max-w-xl mb-12 leading-relaxed"
             >
-              I'm Sai Ram Varma Budharaju, an engineer with ~5 years of experience specializing in distributed systems, event-driven architectures, and cloud-native environments.
+              I'm Sai Ram Varma Budharaju, a software engineer with 5+ years of experience specializing in scalable backend systems, async processing pipelines, and event-driven architectures — currently building real-time data systems at Uber.
             </motion.p>
             
             <motion.div 
@@ -486,6 +513,9 @@ const Hero = () => {
             >
               <a href="#work" className="px-8 py-4 bg-white text-black font-medium rounded-full hover:bg-zinc-200 transition-colors flex items-center gap-2">
                 View My Work <ChevronRight size={18} />
+              </a>
+              <a href="/resume.pdf" target="_blank" rel="noreferrer" className="px-6 py-4 rounded-full border border-zinc-800 hover:border-emerald-500/50 hover:bg-zinc-900 transition-all text-zinc-300 hover:text-white font-medium flex items-center gap-2">
+                <Download size={18} /> Résumé
               </a>
               <a href="https://github.com/varmabudharaju" target="_blank" rel="noreferrer" className="p-4 rounded-full border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-900 transition-all text-zinc-400 hover:text-white" aria-label="GitHub">
                 <Github size={20} />
@@ -573,14 +603,19 @@ const About = () => {
       category: "AI & Machine Learning", 
       icon: <Cpu size={18} className="text-purple-400" />,
       items: [
-        { name: "scikit-learn", icon: "devicon-scikitlearn-plain" },
-        { name: "TensorFlow", icon: "devicon-tensorflow-original" },
-        { name: "NumPy", icon: "devicon-numpy-plain" },
-        { name: "Pandas", icon: "devicon-pandas-plain" },
-        { name: "XGBoost", icon: "devicon-python-plain" }, // Fallbacks to python icon
         { name: "LangChain", icon: "devicon-python-plain" },
-        { name: "MLflow", icon: "devicon-python-plain" }
-      ] 
+        { name: "OpenAI API", icon: "devicon-python-plain" },
+        { name: "RAG Pipelines", icon: "devicon-python-plain" },
+        { name: "MCP", icon: "devicon-python-plain" },
+        { name: "pgvector", icon: "devicon-postgresql-plain" },
+        { name: "Federated Learning", icon: "devicon-pytorch-original" },
+        { name: "Hugging Face", icon: "devicon-python-plain" },
+        { name: "scikit-learn", icon: "devicon-scikitlearn-plain" },
+        { name: "XGBoost", icon: "devicon-python-plain" },
+        { name: "MLflow", icon: "devicon-python-plain" },
+        { name: "Pandas", icon: "devicon-pandas-plain" },
+        { name: "NumPy", icon: "devicon-numpy-plain" }
+      ]
     },
     { 
       category: "Data & Distributed Systems", 
@@ -715,35 +750,43 @@ const About = () => {
 const Experience = () => {
   const jobs = [
     {
+      company: "Uber",
+      role: "Software Engineer",
+      period: "Feb 2026 — Present",
+      location: "USA",
+      description: "Build real-time event ingestion pipelines with Kafka and Python for ride and support telemetry, achieving sub-100ms data freshness for dashboards used by 50+ support agents. Redesigned the query layer across MySQL and MongoDB via composite indexing and schema tuning, cutting p95 retrieval latency from 3.2s to 1.4s. Architected role-based REST APIs in Node.js/Express and integrated FastAPI + scikit-learn ticket classification, automating triage for 12K+ weekly tickets.",
+      tech: ["Kafka", "Python", "MySQL", "MongoDB", "Node.js", "FastAPI", "EKS"]
+    },
+    {
       company: "Northeastern University",
       role: "Software Developer",
       period: "Mar 2025 — Dec 2025",
       location: "Washington, USA",
-      description: "Engineered distributed data services using Python and PostgreSQL deploying REST APIs on Kubernetes. Built AI-powered funding workflows using RAG with OpenAI GPT, LangChain, and MLflow. Implemented distributed event streaming pipelines using Apache Kafka and Java Spring Boot on AWS EKS.",
-      tech: ["Python", "PostgreSQL", "Kubernetes", "OpenAI", "Kafka", "Spring Boot"]
+      description: "Built AI-powered grant-eligibility workflows using RAG with OpenAI GPT and LangChain, served via FastAPI with scikit-learn classifiers, processing 300+ records/cycle at 92% accuracy. Implemented event-driven enrollment pipelines with Apache Kafka and Spring Boot on AWS EKS (5K+ events/hour, zero loss), refactored 7 legacy auth modules to OAuth 2.0/JWT, and deployed Prometheus/Grafana monitoring.",
+      tech: ["RAG", "OpenAI", "LangChain", "FastAPI", "Kafka", "Spring Boot", "Kubernetes"]
     },
     {
       company: "University of Florida",
       role: "Software Developer",
       period: "May 2024 — Feb 2025",
       location: "Florida, USA",
-      description: "Engineered backend data services using Python, Django, and MariaDB processing over 300K records per month. Maintained scheduled data processing workflows using Apache Airflow. Deployed containerized applications using Docker and OpenShift.",
-      tech: ["Python", "Django", "MariaDB", "Airflow", "Docker", "OpenShift"]
+      description: "Developed REST APIs with FastAPI and PostgreSQL for research data access, reducing average query response time by 35% through indexing and query-plan optimization. Automated recurring ETL workflows with Apache Airflow (6h → 2h weekly), deployed microservices on AWS EKS with Docker/Kubernetes at 99.5% uptime, and set up OAuth 2.0 + GitHub Actions CI/CD.",
+      tech: ["FastAPI", "PostgreSQL", "Airflow", "Docker", "Kubernetes", "AWS EKS"]
     },
     {
       company: "Tata Consultancy Services",
-      role: "Software Developer/Assistant Systems Engineer",
+      role: "Software Developer / Assistant Systems Engineer",
       period: "Oct 2020 — Apr 2022",
       location: "India",
-      description: "Constructed backend transaction services using Flask, SQLAlchemy, and Oracle Database. Administered asynchronous task execution with Celery and RabbitMQ. Programmed data transformation workflows using Pandas and PySpark.",
-      tech: ["Flask", "Oracle DB", "Celery", "RabbitMQ", "PySpark", "Quarkus"]
+      description: "Built backend transaction services with Flask, SQLAlchemy, and Oracle integrating 4 financial source systems — 300K+ daily records at 99.9% settlement accuracy. Orchestrated 130+ daily settlement jobs with Celery and RabbitMQ (2h → 55min), shipped an XGBoost risk-scoring pipeline (87% precision), and engineered PySpark/Pandas pipelines consolidating 800K+ weekly records.",
+      tech: ["Flask", "Oracle DB", "Celery", "RabbitMQ", "XGBoost", "PySpark"]
     },
     {
       company: "Airbnb",
       role: "Software Developer",
       period: "May 2019 — Sep 2020",
       location: "India",
-      description: "Connected booking workflows to ML recommendations by introducing a Spring Boot to Flask inference shim on EC2. Orchestrated nightly Airflow pipelines from PostgreSQL to Snowflake. Prototyped semantic search using TF-IDF + Elasticsearch.",
+      description: "Connected booking workflows to ML recommendation models via a Spring Boot → Flask inference shim on AWS EC2 (4.5K calls/day, p95 1.2s → 0.8s). Orchestrated nightly Airflow pipelines syncing PostgreSQL to Snowflake, and prototyped a TF-IDF + Elasticsearch semantic search over 1.2K property descriptions (sub-450ms p50).",
       tech: ["Spring Boot", "Flask", "Airflow", "Snowflake", "Elasticsearch"]
     }
   ];
@@ -803,61 +846,308 @@ const Experience = () => {
   );
 };
 
+// Branded gradient cover for projects without product screenshots
+const ProjectCover: React.FC<{
+  title: string;
+  tagline: string;
+  icon: React.ReactNode;
+  gradient: string;
+  command?: string;
+}> = ({ title, tagline, icon, gradient, command }) => (
+  <div className={`relative w-full h-full min-h-[260px] overflow-hidden ${gradient}`}>
+    <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '22px 22px' }} />
+    <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-white/10 blur-3xl" />
+    <div className="relative z-10 h-full flex flex-col justify-between p-8">
+      <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm flex items-center justify-center text-white">
+        {icon}
+      </div>
+      <div>
+        <h4 className="text-3xl font-bold text-white tracking-tight">{title}</h4>
+        <p className="text-white/70 mt-1 text-sm font-medium">{tagline}</p>
+        {command && (
+          <code className="inline-block mt-4 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-white/90 text-xs font-mono">
+            <span className="text-emerald-300">$</span> {command}
+          </code>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// App-screenshot showcase: portrait phone frames over a branded gradient
+const PhoneShowcase: React.FC<{
+  phones: string[];
+  icon: React.ReactNode;
+  gradient: string;
+}> = ({ phones, icon, gradient }) => (
+  <div className={`relative w-full h-full min-h-[340px] overflow-hidden ${gradient}`}>
+    <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '22px 22px' }} />
+    <div className="absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-white/10 blur-3xl" />
+    <div className="absolute top-6 left-6 z-20 w-12 h-12 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm flex items-center justify-center text-white">
+      {icon}
+    </div>
+    <div className="relative z-10 h-full flex items-end justify-center gap-3 px-6 pt-14">
+      {phones.map((src, i) => {
+        const isCenter = i === 1;
+        return (
+          <div
+            key={i}
+            className={`rounded-[1.4rem] border-[3px] border-zinc-900/80 bg-black shadow-2xl overflow-hidden ${isCenter ? "w-2/5 z-10 -mb-2" : "w-1/3 mb-6 opacity-90"}`}
+            style={{ aspectRatio: '1284 / 2778' }}
+          >
+            <img src={src} alt="harmoniQ app screen" className="w-full h-full object-cover object-top" />
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+const linkMeta: Record<string, { label: string; icon: React.ReactNode }> = {
+  pypi: { label: "PyPI", icon: <Package size={15} /> },
+  github: { label: "GitHub", icon: <Github size={15} /> },
+  website: { label: "Website", icon: <Globe size={15} /> },
+  appstore: { label: "App Store", icon: <Download size={15} /> },
+  demo: { label: "Demo", icon: <ExternalLink size={15} /> },
+};
+
+const FeaturedCard: React.FC<{ project: any; reverse: boolean }> = ({ project, reverse }) => {
+  const [activeImg, setActiveImg] = useState(0);
+  const hasImages = project.images && project.images.length > 0;
+  const hasPhones = project.phones && project.phones.length > 0;
+
+  return (
+    <div className={`group relative rounded-3xl overflow-hidden bg-zinc-900/60 border border-zinc-800 hover:border-emerald-500/30 transition-colors flex flex-col ${reverse ? "lg:flex-row-reverse" : "lg:flex-row"}`}>
+      {/* Visual */}
+      <div className="lg:w-3/5 relative overflow-hidden bg-zinc-950 flex flex-col">
+        {hasPhones ? (
+          <PhoneShowcase phones={project.phones} icon={project.phoneIcon} gradient={project.phoneGradient} />
+        ) : hasImages ? (
+          <>
+            <div className="relative aspect-[16/10] overflow-hidden">
+              <img
+                src={project.images[activeImg]}
+                alt={`${project.title} screenshot`}
+                className="w-full h-full object-cover object-top transition-transform duration-700"
+              />
+              <div className="absolute inset-0 ring-1 ring-inset ring-white/5" />
+            </div>
+            {project.images.length > 1 && (
+              <div className="flex gap-2 p-3 bg-zinc-950 border-t border-zinc-900">
+                {project.images.map((img: string, i: number) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveImg(i)}
+                    className={`relative h-12 w-20 rounded-md overflow-hidden border transition-all ${activeImg === i ? "border-emerald-500" : "border-zinc-800 opacity-60 hover:opacity-100"}`}
+                    aria-label={`View screenshot ${i + 1}`}
+                  >
+                    <img src={img} alt="" className="w-full h-full object-cover object-top" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <ProjectCover {...project.cover} />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="lg:w-2/5 p-8 lg:p-10 flex flex-col justify-center">
+        <div className="flex items-center gap-3 mb-3">
+          <h3 className="text-2xl font-bold">{project.title}</h3>
+          {project.badge && (
+            <span className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full">
+              {project.badge}
+            </span>
+          )}
+        </div>
+        <p className="text-zinc-400 leading-relaxed mb-6">{project.description}</p>
+
+        {project.highlights && (
+          <ul className="space-y-2 mb-6">
+            {project.highlights.map((h: string, i: number) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
+                <ChevronRight size={16} className="text-emerald-400 mt-0.5 shrink-0" />
+                <span>{h}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex flex-wrap gap-2 mb-6">
+          {project.tags.map((tag: string, i: number) => (
+            <span key={i} className="px-3 py-1 text-xs font-mono text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-full">
+              {tag}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-3 mt-auto">
+          {project.links.map((link: any, i: number) => (
+            <a
+              key={i}
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                link.primary
+                  ? "bg-white text-black hover:bg-zinc-200"
+                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white"
+              }`}
+            >
+              {linkMeta[link.type]?.icon}
+              {link.label || linkMeta[link.type]?.label}
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Work = () => {
-  const selectedProjects = [
+  const featuredProjects = [
     {
-      title: "PG Semantic",
-      description: "A PostgreSQL extension that integrates semantic search capabilities directly into the database using vector embeddings and pgvector.",
-      image: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=800&auto=format&fit=crop",
-      tags: ["PostgreSQL", "C", "Vector Search", "pgvector"],
-      link: "https://github.com/varmabudharaju/pgsemantic"
+      title: "pgsemantic",
+      badge: "PyPI · 144 tests",
+      description: "Turn any PostgreSQL database into a semantic search engine in 60 seconds — no migrations, no separate vector DB, no pgvector expertise.",
+      highlights: [
+        "5 embedding providers (384–3,072 dims) with HNSW indexing and trigger-based auto-sync",
+        "7-tool MCP server exposing semantic & hybrid search to AI agents over stdio/SSE",
+        "Full CLI + web UI with cross-table search and embedding visualization",
+      ],
+      images: ["/projects/pgsemantic-search.png", "/projects/pgsemantic-visualize.png", "/projects/pgsemantic-crosstable.png"],
+      tags: ["Python", "PostgreSQL", "pgvector", "FastAPI", "MCP"],
+      links: [
+        { type: "pypi", url: "https://pypi.org/project/pgsemantic/" },
+        { type: "github", url: "https://github.com/varmabudharaju/pgsemantic" },
+      ],
     },
     {
+      title: "agent-pd",
+      badge: "Dev tooling",
+      description: "A \"police department\" for Claude Code subagents. A logging-only hook records every tool and permission event; the pd CLI correlates logs with transcripts and reports rule offenses with quoted evidence.",
+      highlights: [
+        "Hash-chained, tamper-evident audit log with off-host append-only sink",
+        "Live \"police scanner\" feed of agent activity and rule violations",
+        "Catch-and-report only — never blocks an agent mid-run",
+      ],
+      cover: {
+        title: "agent-pd",
+        tagline: "Audit & observability for AI agents",
+        icon: <ShieldCheck size={26} />,
+        gradient: "bg-gradient-to-br from-blue-600 via-indigo-700 to-zinc-900",
+        command: "pd watch",
+      },
+      tags: ["Python", "CLI", "Claude Code", "Security", "Observability"],
+      links: [
+        { type: "github", url: "https://github.com/varmabudharaju/agent-pd" },
+      ],
+    },
+    {
+      title: "Chorus",
+      badge: "PyPI · 165 tests",
+      description: "Federated LoRA fine-tuning with mathematically exact aggregation. Implements FedEx-LoRA (ACL/ICLR 2025) to fix the flaw where standard FedAvg breaks for LoRA adapters.",
+      highlights: [
+        "SVD residual folding for exact federated aggregation of LoRA deltas",
+        "FastAPI server with WebSocket round notifications and a full client SDK",
+        "Gaussian differential privacy, Byzantine defenses, and safetensors-only serialization",
+      ],
+      cover: {
+        title: "Chorus",
+        tagline: "Federated LoRA fine-tuning framework",
+        icon: <Network size={26} />,
+        gradient: "bg-gradient-to-br from-emerald-600 via-teal-700 to-zinc-900",
+        command: "pip install chorus-fl",
+      },
+      tags: ["Python", "Federated Learning", "LoRA", "PyTorch", "FastAPI"],
+      links: [
+        { type: "pypi", url: "https://pypi.org/project/chorus-fl/" },
+        { type: "github", url: "https://github.com/varmabudharaju/chorus" },
+      ],
+    },
+    {
+      title: "harmoniQ",
+      badge: "iOS · On-device AI",
+      description: "An AI that learns your body. harmoniQ trains a personal ML model on your Apple Watch data — entirely on your iPhone. 12 health scores, a biological Health Age, and round-the-clock wellness monitoring. Your data never leaves your device.",
+      highlights: [
+        "Personal CoreML TCN model fine-tuned on-device with MLUpdateTask — no cloud",
+        "Biological Health Age from a Gompertz hazard model across 12 health dimensions",
+        "Privacy-preserving federated learning: only Laplace-noised weights leave the phone",
+      ],
+      phones: [
+        "/projects/harmoniq-2-wellness.png",
+        "/projects/harmoniq-1-dashboard.png",
+        "/projects/harmoniq-3-trends.png",
+      ],
+      phoneIcon: <HeartPulse size={22} />,
+      phoneGradient: "bg-gradient-to-br from-rose-500 via-fuchsia-700 to-indigo-900",
+      tags: ["Swift", "CoreML", "Federated Learning", "HealthKit", "iOS"],
+      links: [
+        { type: "appstore", url: "https://apps.apple.com/us/app/harmoniq-health-monitor/id6761321112", primary: true },
+        { type: "website", url: "https://varmabudharaju.github.io/harmoniq-website/" },
+        { type: "github", url: "https://github.com/varmabudharaju/harmoniq-website" },
+      ],
+    },
+    {
+      title: "mongosemantic",
+      badge: "PyPI",
+      description: "Zero-config semantic search for any MongoDB database. Connects to your existing MongoDB, picks a text field, and makes it searchable by meaning — works on Atlas, replica sets, and standalone 7.0+.",
+      highlights: [
+        "Shadow or inline embeddings with Atlas index auto-creation",
+        "Hybrid semantic + BM25 search fused via Atlas $rankFusion",
+        "Online model migration with near-zero-downtime collection swap; MCP server included",
+      ],
+      cover: {
+        title: "mongosemantic",
+        tagline: "Semantic search for MongoDB",
+        icon: <Search size={26} />,
+        gradient: "bg-gradient-to-br from-green-600 via-emerald-800 to-zinc-900",
+        command: "pip install mongosemantic",
+      },
+      tags: ["Python", "MongoDB", "Atlas", "Vector Search", "MCP"],
+      links: [
+        { type: "pypi", url: "https://pypi.org/project/mongosemantic/" },
+        { type: "github", url: "https://github.com/varmabudharaju/mongosemantic" },
+      ],
+    },
+  ];
+
+  const otherProjects = [
+    {
       title: "Shield Shot",
-      description: "A comprehensive security analysis tool designed to capture, analyze, and report on potential vulnerabilities in web applications.",
-      image: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=800&auto=format&fit=crop",
+      description: "A security analysis tool designed to capture, analyze, and report on potential vulnerabilities in web applications.",
       tags: ["Security", "Python", "Analysis Tool"],
       link: "https://github.com/varmabudharaju/ShieldShot"
     },
     {
       title: "LumeShell (ShellBuddy)",
-      description: "A modern terminal emulator powered by AI. Built with Electron, React 19, TypeScript, xterm.js, and node-pty with full PTY emulation and multi-tab support under 80ms latency.",
-      image: "https://images.unsplash.com/photo-1629654297299-c8506221ca97?q=80&w=800&auto=format&fit=crop",
+      description: "A modern AI-powered terminal emulator built with Electron, React 19, TypeScript, xterm.js, and node-pty — full PTY emulation and multi-tab support under 80ms latency.",
       tags: ["TypeScript", "Electron", "React", "Ollama", "OpenAI"],
       link: "https://github.com/varmabudharaju/LumeShell"
     },
     {
       title: "Fatigue Detection",
-      description: "A computer vision system designed to detect driver fatigue in real-time using facial landmarks and eye aspect ratio analysis.",
-      image: "https://images.unsplash.com/photo-1542282088-fe8426682b8f?q=80&w=800&auto=format&fit=crop",
+      description: "A computer vision system that detects driver fatigue in real time using facial landmarks and eye-aspect-ratio analysis.",
       tags: ["Python", "Computer Vision", "Machine Learning"],
       link: "https://github.com/varmabudharaju"
     },
     {
       title: "Care Companion",
-      description: "An AI-powered healthcare assistant application providing personalized care recommendations and health monitoring.",
-      image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?q=80&w=800&auto=format&fit=crop",
+      description: "An AI-powered healthcare assistant providing personalized care recommendations and health monitoring.",
       tags: ["AI", "Healthcare", "Web App"],
       link: "https://github.com/varmabudharaju"
     },
     {
-      title: "Chorus",
-      description: "A Python-based project focusing on advanced data processing and automation workflows.",
-      image: "https://images.unsplash.com/photo-1555949963-aa79dcee981c?q=80&w=800&auto=format&fit=crop",
-      tags: ["Python", "Automation", "Data Processing"],
-      link: "https://github.com/varmabudharaju/chorus"
-    },
-    {
       title: "Twitter Simulator",
-      description: "A highly concurrent Twitter simulator project built to handle massive message passing and state management.",
-      image: "https://images.unsplash.com/photo-1611605698335-8b1569810432?q=80&w=800&auto=format&fit=crop",
+      description: "A highly concurrent Twitter simulator built to handle massive message passing and state management.",
       tags: ["Erlang", "Concurrency", "Distributed Systems"],
       link: "https://github.com/varmabudharaju/twitter-simulator-dev"
     },
     {
       title: "Gossip Protocol",
       description: "Implementation of the Gossip Protocol for robust, decentralized information routing and state synchronization across network nodes.",
-      image: "https://images.unsplash.com/photo-1528312635006-8ea0bc49ec63?q=80&w=800&auto=format&fit=crop",
       tags: ["Erlang", "Networking", "Algorithms"],
       link: "https://github.com/varmabudharaju/Gossip"
     }
@@ -869,39 +1159,41 @@ const Work = () => {
         <FadeIn>
           <div className="mb-16">
             <h2 className="text-3xl md:text-5xl font-bold tracking-tighter mb-4">Selected Work</h2>
-            <p className="text-zinc-400 text-lg max-w-xl">A collection of my top open-source projects and technical explorations.</p>
+            <p className="text-zinc-400 text-lg max-w-xl">Open-source libraries and tools I build and ship — most are published on PyPI with full test suites.</p>
           </div>
         </FadeIn>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
-          {selectedProjects.map((project, idx) => (
-            <FadeIn key={idx} delay={idx * 0.1} className={idx === 0 ? "md:col-span-2" : ""}>
+        {/* Featured projects */}
+        <div className="space-y-8 mb-20">
+          {featuredProjects.map((project, idx) => (
+            <FadeIn key={idx} delay={idx * 0.05}>
+              <FeaturedCard project={project} reverse={idx % 2 === 1} />
+            </FadeIn>
+          ))}
+        </div>
+
+        {/* Other projects */}
+        <FadeIn>
+          <h3 className="text-2xl font-bold tracking-tighter mb-8">More Projects</h3>
+        </FadeIn>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+          {otherProjects.map((project, idx) => (
+            <FadeIn key={idx} delay={idx * 0.05}>
               <TiltCard className="h-full">
-                <div className={`group relative rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 h-full flex flex-col ${idx === 0 ? "md:flex-row" : ""}`}>
-                  <div className={`relative overflow-hidden ${idx === 0 ? "md:w-1/2 aspect-video md:aspect-auto" : "aspect-video"}`}>
-                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/10 transition-colors z-10" />
-                    <img 
-                      src={project.image} 
-                      alt={project.title} 
-                      className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
-                      referrerPolicy="no-referrer"
-                    />
+                <div className="group relative rounded-2xl p-6 bg-zinc-900/50 border border-zinc-800 hover:border-emerald-500/30 transition-colors h-full flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-lg font-bold">{project.title}</h4>
+                    <a href={project.link} target="_blank" rel="noreferrer" className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors shrink-0" aria-label={`View ${project.title}`}>
+                      <ExternalLink size={16} />
+                    </a>
                   </div>
-                  <div className={`p-8 flex flex-col flex-grow justify-center ${idx === 0 ? "md:w-1/2" : ""}`}>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-2xl font-bold">{project.title}</h3>
-                      <a href={project.link} target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors" aria-label={`View ${project.title}`}>
-                        <ExternalLink size={18} />
-                      </a>
-                    </div>
-                    <p className="text-zinc-400 mb-8 leading-relaxed">{project.description}</p>
-                    <div className="flex flex-wrap gap-2 mt-auto">
-                      {project.tags.map((tag, i) => (
-                        <span key={i} className="px-3 py-1 text-xs font-mono text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-full">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
+                  <p className="text-zinc-400 text-sm leading-relaxed mb-5 flex-grow">{project.description}</p>
+                  <div className="flex flex-wrap gap-2 mt-auto">
+                    {project.tags.map((tag, i) => (
+                      <span key={i} className="px-2.5 py-1 text-[11px] font-mono text-zinc-400 bg-zinc-800/50 border border-zinc-700/50 rounded-full">
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </TiltCard>
@@ -992,22 +1284,144 @@ const Papers = () => {
   );
 };
 
+const Resume = () => {
+  return (
+    <section id="resume" className="py-32 relative border-t border-zinc-900 bg-zinc-950/50">
+      <div className="max-w-4xl mx-auto px-6 md:px-12 relative z-10">
+        <FadeIn>
+          <TiltCard>
+            <div className="relative rounded-3xl p-10 md:p-12 bg-zinc-900/60 border border-zinc-800 overflow-hidden">
+              <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-emerald-500/10 blur-[100px] pointer-events-none" />
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <FileText className="text-emerald-400" size={28} />
+                    <h2 className="text-3xl md:text-4xl font-bold tracking-tighter">Résumé</h2>
+                  </div>
+                  <p className="text-zinc-400 text-lg leading-relaxed max-w-md">
+                    5+ years building scalable backend systems, async pipelines, and AI/ML infrastructure. Grab the full PDF for the complete history.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0">
+                  <a
+                    href="/resume.pdf"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-2 px-7 py-4 bg-white text-black font-medium rounded-full hover:bg-zinc-200 transition-colors"
+                  >
+                    <ExternalLink size={18} /> View Résumé
+                  </a>
+                  <a
+                    href="/resume.pdf"
+                    download="Sai-Ram-Varma-Budharaju-Resume.pdf"
+                    className="inline-flex items-center justify-center gap-2 px-7 py-4 rounded-full border border-zinc-700 text-zinc-200 font-medium hover:border-emerald-500/50 hover:bg-zinc-900 transition-all"
+                  >
+                    <Download size={18} /> Download PDF
+                  </a>
+                </div>
+              </div>
+            </div>
+          </TiltCard>
+        </FadeIn>
+      </div>
+    </section>
+  );
+};
+
+const MessageForm = () => {
+  const [form, setForm] = useState({ name: '', email: '', message: '' });
+  const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [error, setError] = useState('');
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus('sending');
+    setError('');
+    try {
+      await sendMessage(form);
+      setStatus('success');
+      setForm({ name: '', email: '', message: '' });
+    } catch (err: any) {
+      setStatus('error');
+      setError(err?.message || 'Something went wrong. Please email me directly.');
+    }
+  };
+
+  if (status === 'success') {
+    return (
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-10 text-center">
+        <CheckCircle2 className="text-emerald-400 mx-auto mb-4" size={40} />
+        <h3 className="text-2xl font-bold mb-2">Message sent!</h3>
+        <p className="text-zinc-400">Thanks for reaching out — I'll get back to you soon.</p>
+        <button onClick={() => setStatus('idle')} className="mt-6 text-sm text-emerald-400 hover:text-emerald-300 font-medium">
+          Send another
+        </button>
+      </div>
+    );
+  }
+
+  const inputCls = "w-full bg-zinc-900/70 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/60 transition-colors";
+
+  return (
+    <form onSubmit={handleSubmit} className="text-left rounded-2xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-sm p-6 md:p-8 space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="name" className="block text-xs font-mono uppercase tracking-wider text-zinc-500 mb-2">Name</label>
+          <input id="name" name="name" type="text" required value={form.name} onChange={handleChange} placeholder="Your name" className={inputCls} />
+        </div>
+        <div>
+          <label htmlFor="email" className="block text-xs font-mono uppercase tracking-wider text-zinc-500 mb-2">Email</label>
+          <input id="email" name="email" type="email" required value={form.email} onChange={handleChange} placeholder="you@example.com" className={inputCls} />
+        </div>
+      </div>
+      <div>
+        <label htmlFor="message" className="block text-xs font-mono uppercase tracking-wider text-zinc-500 mb-2">Message</label>
+        <textarea id="message" name="message" required rows={5} value={form.message} onChange={handleChange} placeholder="What's on your mind?" className={`${inputCls} resize-none`} />
+      </div>
+
+      {!contactConfigured && (
+        <p className="text-sm text-amber-400/90">Heads up: the contact form isn't connected yet — add your Web3Forms key to enable sending.</p>
+      )}
+
+      {status === 'error' && (
+        <p className="text-sm text-red-400">{error} You can also email me at <a href="mailto:sairam.vzf33@gmail.com" className="underline">sairam.vzf33@gmail.com</a>.</p>
+      )}
+
+      <button
+        type="submit"
+        disabled={status === 'sending'}
+        className="w-full inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-black font-medium rounded-full hover:bg-zinc-200 transition-colors text-lg disabled:opacity-60"
+      >
+        {status === 'sending' ? <><Loader2 size={18} className="animate-spin" /> Sending…</> : <><Send size={18} /> Send Message</>}
+      </button>
+    </form>
+  );
+};
+
 const Contact = () => {
   return (
     <section id="contact" className="py-32 relative border-t border-zinc-900 overflow-hidden">
       {/* Background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
-      
+
       <div className="max-w-3xl mx-auto px-6 md:px-12 text-center relative z-10">
         <FadeIn>
           <p className="text-emerald-400 font-mono text-sm mb-4 tracking-wider uppercase">What's Next?</p>
           <h2 className="text-4xl md:text-7xl font-bold tracking-tighter mb-6">Get In Touch</h2>
           <p className="text-zinc-400 text-lg mb-10 max-w-xl mx-auto leading-relaxed">
-            I'm currently looking for new opportunities. Whether you have a question, a project idea, or just want to say hi, my inbox is always open.
+            I'm currently looking for new opportunities. Whether you have a question, a project idea, or just want to say hi — drop me a message below and it lands straight in my inbox.
           </p>
-          <a href="mailto:sairamvarmabudharaju5@gmail.com" className="inline-flex items-center justify-center px-8 py-4 bg-white text-black font-medium rounded-full hover:bg-zinc-200 transition-colors text-lg shadow-[0_0_40px_rgba(255,255,255,0.2)] hover:shadow-[0_0_60px_rgba(255,255,255,0.3)]">
-            Say Hello
-          </a>
+        </FadeIn>
+        <FadeIn delay={0.1}>
+          <MessageForm />
+          <p className="text-zinc-500 text-sm mt-6">
+            Prefer email? Reach me directly at{' '}
+            <a href="mailto:sairam.vzf33@gmail.com" className="text-zinc-300 hover:text-white underline transition-colors">sairam.vzf33@gmail.com</a>
+          </p>
         </FadeIn>
       </div>
     </section>
@@ -1041,6 +1455,7 @@ export default function App() {
         <About />
         <Experience />
         <Work />
+        <Resume />
         <Papers />
         <Contact />
       </main>
