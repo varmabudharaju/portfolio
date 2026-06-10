@@ -1027,11 +1027,11 @@ const Work = () => {
     {
       title: "agent-pd",
       badge: "Dev tooling",
-      description: "A \"police department\" for Claude Code subagents. A logging-only hook records every tool and permission event; the pd CLI correlates logs with transcripts and reports rule offenses with quoted evidence.",
+      description: "A \"police department\" for your Claude Code agents. A logging-only hook audits the main agent and every subagent, and the pd CLI reports rule offenses — permission bypass, out-of-scope & credential access, self-permissioning, off-task work — with quoted evidence.",
       highlights: [
-        "Hash-chained, tamper-evident audit log with off-host append-only sink",
-        "Live \"police scanner\" feed of agent activity and rule violations",
-        "Catch-and-report only — never blocks an agent mid-run",
+        "Catch-and-report by design — audits everything, never blocks an agent mid-run",
+        "Hash-chained, tamper-evident audit log with an off-host append-only sink",
+        "Live \"police scanner\" feed of agent activity and rule violations as they happen",
       ],
       cover: {
         title: "agent-pd",
